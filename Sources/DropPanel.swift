@@ -69,7 +69,9 @@ final class DropPanelController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        // The system shadow treats the glass as a rectangle and draws a dark square-cornered
+        // outline around the rounded panel. The glass has its own light edge instead.
+        panel.hasShadow = false
         panel.hidesOnDeactivate = false
         panel.onCancel = { [weak self] in self?.hide() }
 
