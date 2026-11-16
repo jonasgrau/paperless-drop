@@ -4,6 +4,8 @@ A small macOS menu bar app that uploads PDFs to your self-hosted [paperless-ngx]
 
 > Unofficial. This project is not affiliated with or endorsed by the Paperless-ngx project.
 
+![Dragging a PDF onto the menu bar icon: the panel opens, the upload runs, and the document is added](docs/demo.gif)
+
 ## Features
 
 - Drag one or more PDFs onto the menu bar icon. A panel opens under it while you drag, and you can drop onto the panel as well.
@@ -12,6 +14,15 @@ A small macOS menu bar app that uploads PDFs to your self-hosted [paperless-ngx]
 - One notification per batch. A failure has a **Retry** button, and a token or URL problem opens Settings when clicked.
 - Menu bar only, no Dock icon. Uses Liquid Glass on macOS 26 and newer, and a frosted material on older systems.
 - Your API token lives in the Keychain. No third-party dependencies, no analytics: the app only talks to your own server.
+
+## Screenshots
+
+<p>
+  <img src="docs/panel.png" alt="The panel with uploads in every state: uploading, waiting, failed, duplicate and added" width="400">
+  <img src="docs/settings.png" alt="The Settings window with the Paperless address, the API token field and the Open at login switch" width="440">
+</p>
+
+The recording and screenshots use made-up files and a local test server, not a real Paperless instance.
 
 ## Requirements
 
