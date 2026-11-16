@@ -34,7 +34,17 @@ The recording and screenshots use made-up files and a local test server, not a r
 
 ## Install
 
-Clone the repository and run, in its folder:
+### Download (not signed)
+
+1. Download `PaperlessDrop-<version>.dmg` from the [Releases page](https://github.com/jonasgrau/paperless-drop/releases), open it and drag **PaperlessDrop** onto **Applications**.
+2. The app is not signed with an Apple Developer ID and not notarized, so macOS blocks the first start with a message like "Apple could not verify…". That is expected. Click **Done**, open **System Settings → Privacy & Security**, scroll down to **Security**, click **Open Anyway** next to the message about Paperless Drop and confirm. The button is only there for about an hour after the blocked attempt, and you need it once ([Apple's guide](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unidentified-developer-mh40616/mac)).
+3. Optional: check the download against the checksum file of the same release. In the folder with both files, run `shasum -a 256 -c PaperlessDrop-<version>.dmg.sha256`.
+
+The build is universal (Apple silicon and Intel). The [release workflow](.github/workflows/release.yml) makes it from the tagged source. To update, replace the app in Applications; macOS then asks for Keychain access again, because the ad-hoc signature changes with every build.
+
+### Build and install from source
+
+If you'd rather not bypass Gatekeeper, build it yourself. Clone the repository and run, in its folder:
 
 ```sh
 ./Scripts/install.sh
@@ -77,6 +87,8 @@ Run the tests (they use a stub server, so no Paperless instance is needed):
 xcodebuild test -project PaperlessDrop.xcodeproj -scheme PaperlessDrop -destination "platform=macOS" -derivedDataPath build
 ```
 
+`Scripts/make-dmg.sh` builds the dmg the same way the release workflow does.
+
 The Xcode project is generated from `project.yml` and is not committed. The app icon is drawn by `Scripts/make-icon.swift` (`swift Scripts/make-icon.swift`).
 
 To read the logs, use the full path because `log` is a built-in in zsh:
@@ -95,6 +107,7 @@ If you fork it, change the bundle identifier in `project.yml`, and the matching 
 
 ## Troubleshooting
 
+- **macOS says it can't verify the app, or blocks it.** The download is not notarized. Use **Open Anyway** as described under Install.
 - **The Keychain asks for access after every rebuild.** The app is signed ad-hoc, so each build looks like a new program to macOS. Click "Always Allow", or set your own signing identity in `project.yml`.
 - **Notifications show an empty icon.** macOS caches icons system-wide. Run `sudo rm -rf /Library/Caches/com.apple.iconservices.store && sudo killall iconservicesd iconservicesagent` in Terminal, then `killall NotificationCenter usernoted`.
 - **My server uses plain `http://`.** macOS blocks that by default (App Transport Security). Add an exception under `info.properties` in `project.yml`, for example `NSAppTransportSecurity: { NSAllowsLocalNetworking: true }` for a server on your local network.

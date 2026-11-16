@@ -1,0 +1,53 @@
+name: Release
+
+# Builds a universal (not notarized) dmg for a version tag and attaches it, with a SHA-256
+# checksum, to the GitHub release of that tag. Create the release first, then this runs on the tag.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to attach the dmg to, for example v0.1.1
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  dmg:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # attach the files to the release
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+
+      - name: Select the newest Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -n 1)
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Build the dmg
+        run: Scripts/make-dmg.sh dist
+
+      - name: Check that the app version matches the tag
+        run: |
+          APP_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+            build-release/Build/Products/Release/PaperlessDrop.app/Contents/Info.plist)
+          if [ "v$APP_VERSION" != "$TAG" ]; then
+            echo "The app says $APP_VERSION but the tag is $TAG. Bump MARKETING_VERSION in project.yml." >&2
+            exit 1
+          fi
+
+      - name: Attach the files to the release
+        run: gh release upload "$TAG" dist/*.dmg dist/*.sha256 --clobber --repo "$GITHUB_REPOSITORY"
