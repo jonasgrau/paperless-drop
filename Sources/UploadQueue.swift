@@ -141,7 +141,7 @@ final class UploadQueue {
             setStatus(.uploading(progress: 0), for: id)
 
             let task = Task<Outcome, any Error> { [weak self] in
-                let client = try PaperlessClient.fromSettings()
+                let client = try await PaperlessClient.fromSettings()
                 let taskID = try await client.upload(fileURL) { fraction in
                     Task { @MainActor in self?.setProgress(fraction, for: id) }
                 }

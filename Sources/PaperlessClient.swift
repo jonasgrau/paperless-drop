@@ -50,7 +50,11 @@ struct PaperlessClient: Sendable {
     }
 
     /// Reads the base URL from UserDefaults and the token from the Keychain.
-    static func fromSettings() throws -> PaperlessClient {
+    /// Reading the token can block for as long as macOS shows its access question (a rebuilt
+    /// app is a new program to it), so `@concurrent` keeps it off the main thread and the
+    /// panel stays responsive meanwhile.
+    @concurrent
+    static func fromSettings() async throws -> PaperlessClient {
         guard let base = storedBaseURL(), let token = Keychain.readToken(), !token.isEmpty else {
             throw PaperlessError.notConfigured
         }
