@@ -48,9 +48,12 @@ struct PaperlessClient: Sendable {
     var pollInterval: Duration = .seconds(2)
     var taskTimeout: TimeInterval = 10 * 60
 
+    /// Where the address is saved in the app's preferences.
+    static let baseURLKey = "baseURL"
+
     /// The saved base URL without trailing slash, or nil if none is set.
     static func storedBaseURL() -> String? {
-        var base = UserDefaults.standard.string(forKey: "baseURL")?
+        var base = UserDefaults.standard.string(forKey: Self.baseURLKey)?
             .trimmingCharacters(in: .whitespaces) ?? ""
         while base.hasSuffix("/") { base.removeLast() }
         return base.isEmpty ? nil : base

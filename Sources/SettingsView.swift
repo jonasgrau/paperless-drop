@@ -3,67 +3,30 @@ import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
-    private enum Feedback: Equatable {
-        case checking
-        case success(String)
-        case error(String)
-        case info(String)
+    private enum Field { case address, token }
 
-        /// What VoiceOver says when this appears. Changing a label on screen is silent otherwise.
-        var announcement: String? {
-            switch self {
-            case .checking: nil
-            case .success(let text), .error(let text), .info(let text): text
-            }
-        }
-    }
-
-    private enum UpdateStatus: Equatable {
-        case checking
-        case upToDate
-        case available(UpdateChecker.Release)
-        case failed(String)
-
-        var announcement: String? {
-            switch self {
-            case .checking: nil
-            case .upToDate: "You're up to date."
-            case .available(let release): "Version \(release.version) is available."
-            case .failed(let message): message
-            }
-        }
-    }
-
-    let version: AppVersion
-    @AppStorage("baseURL") private var storedURL = ""
-    @State private var url = ""
-    @State private var token = ""
-    @State private var hasToken = Keychain.hasToken()
-    @State private var feedback: Feedback?
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
-    @State private var loginNote: String?
-    @State private var updateStatus: UpdateStatus?
-
-    init(version: AppVersion = .current) {
-        self.version = version
-    }
+    // The model is created by whoever shows the window and handed in; the view owns no logic.
+    @Bindable var model: SettingsModel
+    @FocusState private var focus: Field?
 
     var body: some View {
         // Messages have fixed-height areas, so the window never changes size while you use it.
         Form {
             // verbatim: a string literal would be parsed as Markdown and the URL shown as a blue link.
-            TextField("Paperless URL", text: $url, prompt: Text(verbatim: "https://paperless.example.com"))
-            SecureField("API token", text: $token,
-                        prompt: Text(hasToken ? "Stored in Keychain – paste to replace" : "Paste API token"))
+            TextField("Paperless URL", text: $model.address, prompt: Text(verbatim: "https://paperless.example.com"))
+                .focused($focus, equals: .address)
+            SecureField("API token", text: $model.token,
+                        prompt: Text(model.hasToken ? "Stored in Keychain – paste to replace" : "Paste API token"))
+                .focused($focus, equals: .token)
             tokenHelp
 
             HStack(alignment: .top) {
                 feedbackView
                     .frame(height: 34, alignment: .topLeading)
                 Spacer()
-                Button("Save", action: save)
+                Button("Save") { Task { await model.save() } }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(isChecking)
+                    .disabled(model.isChecking)
             }
             .padding(.top, 4)
 
@@ -71,14 +34,17 @@ struct SettingsView: View {
 
             // Unlike the fields above, this applies at once and has nothing to do with Save.
             VStack(alignment: .leading, spacing: 2) {
-                Toggle("Open at login", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, enabled in setLaunchAtLogin(enabled) }
-                Text(loginNote ?? " ")
+                Toggle("Open at login", isOn: Binding(
+                    get: { model.launchAtLogin },
+                    set: { model.setLaunchAtLogin($0) }
+                ))
+                Text(model.loginNote ?? " ")
                     .font(.caption)
                     .foregroundStyle(.red)
                     .lineLimit(1)
-                    .help(loginNote ?? "")
+                    .help(model.loginNote ?? "")
                     .frame(height: 16, alignment: .topLeading)
+                    .accessibilityHidden(model.loginNote == nil) // don't read out the blank placeholder
             }
 
             Divider().padding(.vertical, 4)
@@ -89,9 +55,14 @@ struct SettingsView: View {
         .padding(.bottom, 14) // the Form already adds a little space below the last row
         .frame(width: 440)
         .fixedSize(horizontal: false, vertical: true)
-        .onAppear { url = storedURL }
-        .onChange(of: feedback) { _, new in announce(new?.announcement) }
-        .onChange(of: updateStatus) { _, new in announce(new?.announcement) }
+        .task {
+            // Start where typing is needed: the address if there is none yet, otherwise the token.
+            // Set here because `.defaultFocus` does nothing in a window hosted from AppKit.
+            focus = model.address.isEmpty ? .address : .token
+            await model.refreshTokenState()
+        }
+        .onChange(of: model.feedback) { _, new in announce(new?.announcement) }
+        .onChange(of: model.updateStatus) { _, new in announce(new?.announcement) }
     }
 
     // MARK: - Token help
@@ -101,45 +72,27 @@ struct SettingsView: View {
             Text("Find the token in Paperless under My Profile → API Auth Token.")
                 .foregroundStyle(.secondary)
             HStack(spacing: 14) {
-                if let site = siteURL { Link("Open Paperless", destination: site) }
-                if hasToken { Button("Remove stored token", action: removeToken).buttonStyle(.link) }
+                if let site = model.siteURL { Link("Open Paperless", destination: site) }
+                if model.hasToken {
+                    Button("Remove stored token") { Task { await model.removeToken() } }
+                        .buttonStyle(.link)
+                }
             }
         }
         .font(.caption)
     }
 
-    /// The address as typed, once it is a usable one.
-    private var siteURL: URL? {
-        if case .success(let address) = ServerAddress.normalize(url) { URL(string: address) } else { nil }
-    }
-
-    private func removeToken() {
-        Task {
-            let removed = await Task.detached { Keychain.deleteToken() }.value
-            if removed {
-                hasToken = false
-                token = ""
-                feedback = .info("Token removed from the Keychain")
-            } else {
-                feedback = .error("Couldn't remove the token from the Keychain")
-            }
-        }
-    }
-
     // MARK: - Save and check
 
-    private var isChecking: Bool {
-        if case .checking = feedback { true } else { false }
-    }
-
     @ViewBuilder private var feedbackView: some View {
-        switch feedback {
+        switch model.feedback {
         case .checking:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
                 Text("Checking connection…")
             }
             .foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
         case .success(let text):
             message(text, symbol: "checkmark.circle.fill", symbolColor: .green, textColor: .secondary)
         case .error(let text):
@@ -151,10 +104,13 @@ struct SettingsView: View {
         }
     }
 
-    /// Two lines at most; the full text is in the tooltip.
+    /// Two lines at most; the full text is in the tooltip. The symbol only repeats what the
+    /// color says, so VoiceOver skips it instead of reading "checkmark circle fill".
     private func message(_ text: String, symbol: String, symbolColor: Color, textColor: Color) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: symbol).foregroundStyle(symbolColor)
+            Image(systemName: symbol)
+                .foregroundStyle(symbolColor)
+                .accessibilityHidden(true)
             Text(text)
                 .foregroundStyle(textColor)
                 .lineLimit(2)
@@ -163,65 +119,8 @@ struct SettingsView: View {
         .font(.callout)
     }
 
-    /// Saves the address, then the token, then makes one real API call, so a typo or a wrong
-    /// token shows up here instead of on the next upload.
-    private func save() {
-        switch ServerAddress.normalize(url) {
-        case .failure(let problem):
-            feedback = .error(problem.message)
-            return
-        case .success(let address):
-            url = address
-            storedURL = address
-        }
-
-        let newToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        feedback = .checking
-        Task {
-            // The Keychain can block while macOS asks for access, so never on the main thread.
-            if !newToken.isEmpty {
-                guard await Task.detached(operation: { Keychain.saveToken(newToken) }).value else {
-                    feedback = .error("Couldn't save the token to the Keychain")
-                    return
-                }
-                token = ""
-                hasToken = true
-            }
-            guard hasToken else {
-                feedback = .error("Address saved – the API token is still missing")
-                return
-            }
-            do {
-                let result = try await PaperlessClient.fromSettings().checkConnection()
-                var text = "Connected"
-                if let version = result.version { text += " – Paperless \(version)" }
-                if let count = result.documents { text += " · \(count) documents" }
-                feedback = .success(text)
-            } catch {
-                feedback = .error(error.localizedDescription)
-            }
-        }
-    }
-
     private func announce(_ text: String?) {
         if let text { AccessibilityNotification.Announcement(text).post() }
-    }
-
-    // MARK: - Open at login
-
-    /// Without this the drop target is missing after a restart, and a drop onto nothing fails silently.
-    private func setLaunchAtLogin(_ enabled: Bool) {
-        guard enabled != (SMAppService.mainApp.status == .enabled) else { return }
-        loginNote = nil
-        do {
-            if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-            if SMAppService.mainApp.status == .requiresApproval {
-                loginNote = "Allow Paperless Drop in System Settings → General → Login Items"
-            }
-        } catch {
-            launchAtLogin = SMAppService.mainApp.status == .enabled
-            loginNote = "Couldn't change the login item: \(error.localizedDescription)"
-        }
     }
 
     // MARK: - Version and updates
@@ -231,13 +130,13 @@ struct SettingsView: View {
     private var updateFooter: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(version.description)
+                Text(model.version.description)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                 Spacer()
-                Button("Check for Updates…", action: checkForUpdates)
-                    .disabled(isCheckingForUpdates)
+                Button("Check for Updates…") { Task { await model.checkForUpdates() } }
+                    .disabled(model.isCheckingForUpdates)
             }
             updateStatusView
                 .frame(height: 16, alignment: .leading)
@@ -245,7 +144,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var updateStatusView: some View {
-        switch updateStatus {
+        switch model.updateStatus {
         case .checking:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
@@ -253,22 +152,23 @@ struct SettingsView: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
         case .upToDate:
             HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityHidden(true)
                 Text("You're up to date.").foregroundStyle(.secondary)
             }
             .font(.caption)
         case .available(let release):
             HStack(spacing: 6) {
-                Image(systemName: "arrow.down.circle.fill").foregroundStyle(Color.accentColor)
+                Image(systemName: "arrow.down.circle.fill").foregroundStyle(Color.accentColor).accessibilityHidden(true)
                 Text("Version \(release.version) is available.")
                 Link("View release", destination: release.url)
             }
             .font(.caption)
         case .failed(let message):
             HStack(spacing: 6) {
-                Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
+                Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red).accessibilityHidden(true)
                 Text(message).foregroundStyle(.red).lineLimit(1).help(message)
             }
             .font(.caption)
@@ -276,24 +176,32 @@ struct SettingsView: View {
             Color.clear
         }
     }
+}
 
-    private var isCheckingForUpdates: Bool {
-        if case .checking = updateStatus { true } else { false }
-    }
+// MARK: - The real system
 
-    private func checkForUpdates() {
-        updateStatus = .checking
-        let current = version.short
-        Task {
-            do {
-                switch try await UpdateChecker().check(currentVersion: current) {
-                case .upToDate: updateStatus = .upToDate
-                case .available(let release): updateStatus = .available(release)
+extension SettingsModel.Services {
+    /// What the app uses: saved preferences, the Keychain, Paperless, GitHub and the login item.
+    static var live: SettingsModel.Services {
+        SettingsModel.Services(
+            storedAddress: { UserDefaults.standard.string(forKey: PaperlessClient.baseURLKey) ?? "" },
+            storeAddress: { UserDefaults.standard.set($0, forKey: PaperlessClient.baseURLKey) },
+            hasToken: { Keychain.hasToken() },
+            saveToken: { Keychain.saveToken($0) },
+            deleteToken: { Keychain.deleteToken() },
+            checkConnection: { try await PaperlessClient.fromSettings().checkConnection() },
+            checkForUpdates: { try await UpdateChecker().check(currentVersion: $0) },
+            loginItemStatus: {
+                switch SMAppService.mainApp.status {
+                case .enabled: .enabled
+                case .requiresApproval: .requiresApproval
+                default: .disabled
                 }
-            } catch {
-                updateStatus = .failed(error.localizedDescription)
+            },
+            setLaunchAtLogin: { enabled in
+                if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
             }
-        }
+        )
     }
 }
 
@@ -303,20 +211,85 @@ struct SettingsView: View {
 final class SettingsWindowController {
     private var window: NSWindow?
 
+    private func makeContent() -> NSHostingController<SettingsView> {
+        NSHostingController(rootView: SettingsView(model: SettingsModel(services: .live, version: .current)))
+    }
+
     func show() {
         if window == nil {
-            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
+            let window = NSWindow(contentViewController: makeContent())
             window.title = "Paperless Drop Settings"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
             window.center()
             self.window = window
         } else if window?.isVisible == false {
-            // The window is kept for next time; start it with fresh state, so an old "Connected" or
-            // "You're up to date" doesn't linger and switches show what the system says now.
-            window?.contentViewController = NSHostingController(rootView: SettingsView())
+            // The window is kept for next time; start it with a fresh model, so an old "Connected" or
+            // "You're up to date" doesn't linger and the switches show what the system says now.
+            window?.contentViewController = makeContent()
         }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
     }
 }
+
+// MARK: - Previews
+
+#if DEBUG
+extension SettingsModel.Services {
+    /// Touches nothing: no Keychain, no preferences, no network, no login item.
+    static var preview: SettingsModel.Services {
+        SettingsModel.Services(
+            storedAddress: { "" },
+            storeAddress: { _ in },
+            hasToken: { true },
+            saveToken: { _ in true },
+            deleteToken: { true },
+            checkConnection: { (version: "3.4.2", documents: 189) },
+            checkForUpdates: { _ in .upToDate },
+            loginItemStatus: { .disabled },
+            setLaunchAtLogin: { _ in }
+        )
+    }
+}
+
+extension SettingsModel {
+    /// A model with made-up data, for previews and the README screenshot.
+    static func preview(address: String = "https://paperless.example.com", hasToken: Bool = true,
+                        feedback: Feedback? = nil, updateStatus: UpdateStatus? = nil) -> SettingsModel {
+        SettingsModel(services: .preview, version: AppVersion(short: "0.1.2", build: "4"), address: address,
+                      hasToken: hasToken, feedback: feedback, updateStatus: updateStatus)
+    }
+}
+
+private let previewRelease = UpdateChecker.Release(
+    version: "0.2.0",
+    url: URL(string: "https://github.com/jonasgrau/paperless-drop/releases/tag/v0.2.0")!
+)
+
+#Preview("Empty, first start") {
+    SettingsView(model: .preview(address: "", hasToken: false))
+}
+
+#Preview("Connected, update available") {
+    SettingsView(model: .preview(
+        feedback: .success("Connected – Paperless 3.4.2 · 189 documents"),
+        updateStatus: .available(previewRelease)
+    ))
+}
+
+#Preview("Plain http address") {
+    SettingsView(model: .preview(address: "http://paperless.local", feedback: .error(ServerAddress.Problem.insecure.message)))
+}
+
+#Preview("Can't reach the servers") {
+    SettingsView(model: .preview(
+        feedback: .error("Can't reach Paperless: The Internet connection appears to be offline."),
+        updateStatus: .failed("Can't reach GitHub: The Internet connection appears to be offline.")
+    ))
+}
+
+#Preview("Checking") {
+    SettingsView(model: .preview(feedback: .checking, updateStatus: .checking))
+}
+#endif
