@@ -61,6 +61,9 @@ final class UploadQueue {
     @ObservationIgnored var onNotConfigured: () -> Void = {}
     /// Called with true when a batch starts and false when it is finished.
     @ObservationIgnored var onBusyChanged: (Bool) -> Void = { _ in }
+    // Both exist for tests: a stub client, and no real notifications from a test process.
+    @ObservationIgnored var makeClient: @Sendable () async throws -> PaperlessClient = { try await PaperlessClient.fromSettings() }
+    @ObservationIgnored var notificationsEnabled = true
 
     /// True while any file is waiting, uploading or processing.
     var isBusy: Bool { items.contains { $0.status.isActive } }
@@ -134,6 +137,7 @@ final class UploadQueue {
 
     private func processQueue() async {
         var batch: [UUID] = []
+        let makeClient = makeClient
         while let index = items.firstIndex(where: { $0.status == .queued }) {
             let id = items[index].id
             let fileURL = items[index].fileURL
@@ -141,7 +145,7 @@ final class UploadQueue {
             setStatus(.uploading(progress: 0), for: id)
 
             let task = Task<Outcome, any Error> { [weak self] in
-                let client = try await PaperlessClient.fromSettings()
+                let client = try await makeClient()
                 let taskID = try await client.upload(fileURL) { fraction in
                     Task { @MainActor in self?.setProgress(fraction, for: id) }
                 }
@@ -189,7 +193,7 @@ final class UploadQueue {
     }
 
     private func notify(about batch: [Item]) {
-        guard !batch.isEmpty else { return }
+        guard notificationsEnabled, !batch.isEmpty else { return }
         let name = { (item: Item) in item.fileURL.lastPathComponent }
         let failed = batch.filter { $0.status.isFailure }
         let duplicates = batch.filter { if case .duplicate = $0.status { true } else { false } }

@@ -1,6 +1,6 @@
 import Foundation
 
-enum PaperlessError: LocalizedError {
+enum PaperlessError: LocalizedError, Equatable {
     case notConfigured
     case unauthorized
     case forbidden
@@ -40,6 +40,11 @@ enum PaperlessError: LocalizedError {
 struct PaperlessClient: Sendable {
     let baseURL: String
     let token: String
+    // The three values below exist so tests can use a stub session and fast polling;
+    // the app always uses the defaults.
+    var session: URLSession = .shared
+    var pollInterval: Duration = .seconds(2)
+    var taskTimeout: TimeInterval = 10 * 60
 
     /// The saved base URL without trailing slash, or nil if none is set.
     static func storedBaseURL() -> String? {
@@ -66,7 +71,7 @@ struct PaperlessClient: Sendable {
     func checkConnection() async throws -> (version: String?, documents: Int?) {
         var request = try makeRequest("/api/documents/")
         request.url = request.url.flatMap { URL(string: $0.absoluteString + "?page_size=1&fields=id") }
-        let (data, response) = try await perform { try await URLSession.shared.data(for: request) }
+        let (data, response) = try await perform { try await session.data(for: request) }
         struct Page: Decodable { let count: Int? }
         guard let page = try? JSONDecoder().decode(Page.self, from: data) else { throw PaperlessError.badResponse }
         return ((response as? HTTPURLResponse)?.value(forHTTPHeaderField: "X-Version"), page.count)
@@ -78,7 +83,7 @@ struct PaperlessClient: Sendable {
     func documentTitle(_ id: Int?) async -> String? {
         guard let id, var request = try? makeRequest("/api/documents/\(id)/?fields=title") else { return nil }
         request.timeoutInterval = 10
-        guard let (data, _) = try? await perform({ try await URLSession.shared.data(for: request) }) else { return nil }
+        guard let (data, _) = try? await perform({ try await session.data(for: request) }) else { return nil }
         struct Document: Decodable { let title: String? }
         return (try? JSONDecoder().decode(Document.self, from: data))?.title
     }
@@ -96,7 +101,7 @@ struct PaperlessClient: Sendable {
 
         let delegate = UploadProgress(onProgress: onProgress)
         let (data, _) = try await perform {
-            try await URLSession.shared.upload(for: request, fromFile: bodyFile, delegate: delegate)
+            try await session.upload(for: request, fromFile: bodyFile, delegate: delegate)
         }
         // The body is the UUID as a JSON string, e.g. "\"3f2c…\"". Anything else
         // (e.g. an HTML login page from a proxy) means we're not talking to the API.
@@ -108,7 +113,7 @@ struct PaperlessClient: Sendable {
 
     /// Polls the task until it finishes. Returns the new document ID if the server reports one.
     func waitForTask(_ taskID: String) async throws -> Int? {
-        let deadline = Date.now.addingTimeInterval(10 * 60)
+        let deadline = Date.now.addingTimeInterval(taskTimeout)
         var networkErrors = 0
         while Date.now < deadline {
             do {
@@ -129,7 +134,7 @@ struct PaperlessClient: Sendable {
                 networkErrors += 1
                 if networkErrors >= 5 { throw PaperlessError.unreachable(reason) }
             }
-            try await Task.sleep(for: .seconds(2))
+            try await Task.sleep(for: pollInterval)
         }
         throw PaperlessError.timedOut
     }
@@ -141,7 +146,7 @@ struct PaperlessClient: Sendable {
             components?.queryItems = [URLQueryItem(name: "task_id", value: taskID)]
             return components?.url
         }
-        let (data, _) = try await perform { try await URLSession.shared.data(for: request) }
+        let (data, _) = try await perform { try await session.data(for: request) }
 
         // API v10 returns a paginated object, v9 and older a plain array.
         let decoder = JSONDecoder()
