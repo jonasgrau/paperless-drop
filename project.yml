@@ -34,3 +34,27 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: de.jonas.PaperlessDrop
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
+  # Unit tests for the logic that doesn't need the UI. They compile these source files
+  # directly instead of using the app as a test host, which would start the menu bar app.
+  PaperlessDropTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+      - Sources/PaperlessClient.swift
+      - Sources/UploadQueue.swift
+      - Sources/Keychain.swift
+      - Sources/Notifier.swift
+      - Sources/DropTarget.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.jonas.PaperlessDropTests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  PaperlessDrop:
+    build:
+      targets:
+        PaperlessDrop: all
+    test:
+      targets:
+        - PaperlessDropTests
