@@ -57,7 +57,7 @@ This builds a Release version, installs it into `~/Applications` and starts it. 
 
 1. In Paperless, open your profile (top right) → **My Profile** → **API Auth Token**, and copy the token (the circular arrow creates a new one).
 2. Click the menu bar icon, then the gear icon (or right-click the icon → **Settings…**).
-3. Enter your server address without `/api`, for example `https://paperless.example.com`, paste the token and press **Save**. The app checks the connection and shows "Connected" with the server version.
+3. Enter your server address, for example `https://paperless.example.com`, paste the token and press **Save**. You can paste the address as your browser shows it: a missing `https://` is added, and parts like `/api` or `/dashboard` are removed. Plain `http://` addresses are not supported. The app then checks the connection and shows "Connected" with the server version. **Remove stored token** deletes the token from the Keychain again.
 4. Optionally switch on **Open at login**.
 
 The token is stored in the Keychain, the address in the app's preferences. Nothing is stored in the repository.
@@ -115,7 +115,7 @@ If you fork it, change the bundle identifier in `project.yml`, and the matching 
 - **macOS says it can't verify the app, or blocks it.** The download is not notarized. Use **Open Anyway** as described under Install.
 - **The Keychain asks for access after every rebuild.** The app is signed ad-hoc, so each build looks like a new program to macOS. Click "Always Allow", or set your own signing identity in `project.yml`.
 - **Notifications show an empty icon.** macOS caches icons system-wide. Run `sudo rm -rf /Library/Caches/com.apple.iconservices.store && sudo killall iconservicesd iconservicesagent` in Terminal, then `killall NotificationCenter usernoted`.
-- **My server uses plain `http://`.** macOS blocks that by default (App Transport Security). Add an exception under `info.properties` in `project.yml`, for example `NSAppTransportSecurity: { NSAllowsLocalNetworking: true }` for a server on your local network.
+- **My server uses plain `http://`.** The app refuses `http://` addresses, because macOS blocks plain http by default (App Transport Security). If you build the app yourself and want to allow it, add an exception under `info.properties` in `project.yml`, for example `NSAppTransportSecurity: { NSAllowsLocalNetworking: true }` for a server on your local network, and let `http` through in `Sources/ServerAddress.swift`.
 - **Turning on the App Sandbox** would need the entitlements `com.apple.security.app-sandbox`, `com.apple.security.network.client` and `com.apple.security.files.user-selected.read-only`.
 
 ## License
