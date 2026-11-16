@@ -59,12 +59,16 @@ struct StubServer: Sendable {
         StubURLProtocol.register(host: host, handler: handler)
     }
 
-    func client(token: String = "secret-token") -> PaperlessClient {
+    /// A session whose requests all go to the stub server.
+    var session: URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
-        return PaperlessClient(baseURL: "https://\(host)", token: token,
-                               session: URLSession(configuration: configuration),
-                               pollInterval: .milliseconds(5), taskTimeout: 5)
+        return URLSession(configuration: configuration)
+    }
+
+    func client(token: String = "secret-token") -> PaperlessClient {
+        PaperlessClient(baseURL: "https://\(host)", token: token, session: session,
+                        pollInterval: .milliseconds(5), taskTimeout: 5)
     }
 }
 

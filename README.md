@@ -14,8 +14,9 @@ A small macOS menu bar app that uploads PDFs to your self-hosted [paperless-ngx]
 - Or click the icon and choose files (⌘O), which also works with the keyboard and VoiceOver.
 - Per-file status: waiting → uploading (with progress) → processing → done, already in Paperless, or failed. Cancel a queued upload, retry a failed one, click a finished row to open the document in your browser.
 - One notification per batch. A failure has a **Retry** button, and a token or URL problem opens Settings when clicked.
+- Settings shows the version and can look for a newer release when you press **Check for Updates…**. It never checks by itself and installs nothing.
 - Menu bar only, no Dock icon. Uses Liquid Glass on macOS 26 and newer, and a frosted material on older systems.
-- Your API token lives in the Keychain. No third-party dependencies, no analytics: the app only talks to your own server.
+- Your API token lives in the Keychain. No third-party dependencies, no analytics: the app only talks to your own server, and to GitHub only when you press **Check for Updates…**.
 
 ## Screenshots
 
@@ -40,7 +41,7 @@ The recording and screenshots use made-up files and a local test server, not a r
 2. The app is not signed with an Apple Developer ID and not notarized, so macOS blocks the first start with a message like "Apple could not verify…". That is expected. Click **Done**, open **System Settings → Privacy & Security**, scroll down to **Security**, click **Open Anyway** next to the message about Paperless Drop and confirm. The button is only there for about an hour after the blocked attempt, and you need it once ([Apple's guide](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unidentified-developer-mh40616/mac)).
 3. Optional: check the download against the checksum file of the same release. In the folder with both files, run `shasum -a 256 -c PaperlessDrop-<version>.dmg.sha256`.
 
-The build is universal (Apple silicon and Intel). The [release workflow](.github/workflows/release.yml) makes it from the tagged source. To update, replace the app in Applications; macOS then asks for Keychain access again, because the ad-hoc signature changes with every build.
+The build is universal (Apple silicon and Intel). The [release workflow](.github/workflows/release.yml) makes it from the tagged source. To update, download the new dmg and replace the app in Applications (**Check for Updates…** in Settings tells you when there is one); macOS then asks for Keychain access again, because the ad-hoc signature changes with every build.
 
 ### Build and install from source
 
@@ -104,6 +105,10 @@ If you fork it, change the bundle identifier in `project.yml`, and the matching 
 - `POST /api/documents/post_document/` as `multipart/form-data` (file field `document`), authenticated with `Authorization: Token <token>`. The file is streamed from a temporary file, so large PDFs do not fill memory.
 - The response is a task ID. The app polls `GET /api/tasks/?task_id=<id>` until the task succeeds or fails, reading both the v10 format (paginated, lowercase status) and the v9 format (plain array, uppercase status).
 - After a success it asks for the document's title (`GET /api/documents/<id>/?fields=title`) so it can show a name instead of a number.
+
+## How the update check works
+
+**Check for Updates…** (in Settings) asks `GET https://api.github.com/repos/jonasgrau/paperless-drop/releases` and compares the newest release with the running version. It only runs when you press the button, sends nothing but the app version in the User-Agent header, and installs nothing: the link opens the release page in your browser.
 
 ## Troubleshooting
 
