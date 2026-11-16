@@ -79,6 +79,7 @@ struct RecordedRequest: Sendable {
     let query: String
     let headers: [String: String]
     let body: Data
+    let timeout: TimeInterval
 
     init(_ request: URLRequest) {
         method = request.httpMethod ?? "GET"
@@ -86,6 +87,7 @@ struct RecordedRequest: Sendable {
         query = request.url?.query ?? ""
         headers = request.allHTTPHeaderFields ?? [:]
         body = request.bodyData
+        timeout = request.timeoutInterval
     }
 }
 

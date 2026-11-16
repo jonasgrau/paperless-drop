@@ -32,6 +32,12 @@ enum Keychain {
         return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
     }
 
+    /// Removes the stored token. True if it is gone afterwards, also when there was none.
+    static func deleteToken() -> Bool {
+        let status = SecItemDelete(baseQuery as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
+
     /// Replaces the stored token. Returns false if the Keychain refused.
     @discardableResult
     static func saveToken(_ token: String) -> Bool {

@@ -47,6 +47,7 @@ targets:
       - Sources/Notifier.swift
       - Sources/DropTarget.swift
       - Sources/UpdateChecker.swift
+      - Sources/ServerAddress.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.jonas.PaperlessDropTests

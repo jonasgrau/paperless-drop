@@ -11,6 +11,7 @@ enum PaperlessError: LocalizedError, Equatable {
     case timedOut
     case taskFailed(String)
     case duplicate(of: Int?, title: String?)
+    case insecureAddress
 
     var errorDescription: String? {
         switch self {
@@ -24,13 +25,14 @@ enum PaperlessError: LocalizedError, Equatable {
         case .timedOut: "Still processing after 10 minutes – check Paperless"
         case .taskFailed(let message): message
         case .duplicate(let id, _): id.map { "Already in Paperless (#\($0))" } ?? "Already in Paperless"
+        case .insecureAddress: "Plain http:// isn't supported. Use an https:// address in Settings."
         }
     }
 
     /// True when the fix is a new URL or token, so the UI can offer to open Settings.
     var needsSettings: Bool {
         switch self {
-        case .notConfigured, .unauthorized: true
+        case .notConfigured, .unauthorized, .insecureAddress: true
         default: false
         }
     }
@@ -71,6 +73,7 @@ struct PaperlessClient: Sendable {
     func checkConnection() async throws -> (version: String?, documents: Int?) {
         var request = try makeRequest("/api/documents/")
         request.url = request.url.flatMap { URL(string: $0.absoluteString + "?page_size=1&fields=id") }
+        request.timeoutInterval = 15 // Settings waits for this with Save disabled; the default is 60 s
         let (data, response) = try await perform { try await session.data(for: request) }
         struct Page: Decodable { let count: Int? }
         guard let page = try? JSONDecoder().decode(Page.self, from: data) else { throw PaperlessError.badResponse }
@@ -163,6 +166,8 @@ struct PaperlessClient: Sendable {
             (data, response) = try await request()
         } catch let error as URLError where error.code == .cancelled {
             throw CancellationError()
+        } catch let error as URLError where error.code == .appTransportSecurityRequiresSecureConnection {
+            throw PaperlessError.insecureAddress
         } catch let error as URLError {
             throw PaperlessError.unreachable(error.localizedDescription)
         }

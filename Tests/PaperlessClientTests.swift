@@ -267,6 +267,30 @@ struct PaperlessClientTests {
         #expect(request.headers["Authorization"] == "Token secret-token")
     }
 
+    @Test("checkConnection gives up after 15 seconds, not the default minute")
+    func checkConnectionTimeout() async throws {
+        let requests = Recorder<RecordedRequest>()
+        server.respond { request in
+            requests.record(RecordedRequest(request))
+            return .json(["count": 1])
+        }
+
+        _ = try await server.client().checkConnection()
+
+        #expect(try #require(requests.values.first).timeout == 15)
+    }
+
+    @Test("an http:// address is explained instead of showing the system's security message")
+    func insecureAddress() async throws {
+        let file = try TempFile()
+        defer { file.remove() }
+        server.respond { _ in throw URLError(.appTransportSecurityRequiresSecureConnection) }
+
+        await #expect(throws: PaperlessError.insecureAddress) { try await server.client().checkConnection() }
+        await #expect(throws: PaperlessError.insecureAddress) { try await server.client().upload(file.url) }
+        await #expect(throws: PaperlessError.insecureAddress) { try await server.client().waitForTask("t") }
+    }
+
     @Test("checkConnection explains a wrong token and a wrong address")
     func checkConnectionFailures() async throws {
         server.respond { _ in .text("", status: 401) }
@@ -290,6 +314,7 @@ struct PaperlessErrorTests {
         (.timedOut, false),
         (.taskFailed("nope"), false),
         (.duplicate(of: 1, title: nil), false),
+        (.insecureAddress, true),
     ]
 
     @Test("only a missing setup or a rejected token send the user to Settings", arguments: settingsCases)
