@@ -4,7 +4,7 @@ A small macOS menu bar app that uploads PDFs to your self-hosted [paperless-ngx]
 
 > Unofficial. This project is not affiliated with or endorsed by the Paperless-ngx project.
 
-![Dragging a PDF onto the menu bar icon: the panel opens, the upload runs, and the document is added](docs/demo.gif)
+<img src="docs/demo.gif" alt="Dragging a PDF onto the menu bar icon: the panel opens, the upload runs, and the document is added" width="480">
 
 ## Features
 
