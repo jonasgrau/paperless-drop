@@ -1,5 +1,7 @@
 # Paperless Drop
 
+[![CI](https://github.com/jonasgrau/paperless-drop/actions/workflows/ci.yml/badge.svg)](https://github.com/jonasgrau/paperless-drop/actions/workflows/ci.yml)
+
 A small macOS menu bar app that uploads PDFs to your self-hosted [paperless-ngx](https://docs.paperless-ngx.com/) instance. Drag files onto the menu bar icon and they are uploaded, processed and reported back.
 
 > Unofficial. This project is not affiliated with or endorsed by the Paperless-ngx project.
@@ -67,6 +69,12 @@ Quitting while uploads are running asks for confirmation first.
 xcodegen generate
 xcodebuild -project PaperlessDrop.xcodeproj -scheme PaperlessDrop -configuration Debug -derivedDataPath build build
 open build/Build/Products/Debug/PaperlessDrop.app
+```
+
+Run the tests (they use a stub server, so no Paperless instance is needed):
+
+```sh
+xcodebuild test -project PaperlessDrop.xcodeproj -scheme PaperlessDrop -destination "platform=macOS" -derivedDataPath build
 ```
 
 The Xcode project is generated from `project.yml` and is not committed. The app icon is drawn by `Scripts/make-icon.swift` (`swift Scripts/make-icon.swift`).

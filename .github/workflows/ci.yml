@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The app needs the macOS 26 SDK (Liquid Glass), so use the newest non-beta Xcode on the runner.
+      - name: Select the newest Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | grep -vi beta | sort -V | tail -n 1)
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        run: xcodegen generate
+
+      - name: Run the tests
+        run: |
+          xcodebuild test \
+            -project PaperlessDrop.xcodeproj -scheme PaperlessDrop \
+            -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath build
+
+      - name: Build the Release app
+        run: |
+          xcodebuild build \
+            -project PaperlessDrop.xcodeproj -scheme PaperlessDrop -configuration Release \
+            -destination "platform=macOS,arch=$(uname -m)" -derivedDataPath build
