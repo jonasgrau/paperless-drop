@@ -30,8 +30,6 @@ struct SettingsView: View {
             }
             .padding(.top, 4)
 
-            Divider().padding(.vertical, 4)
-
             // Unlike the fields above, this applies at once and has nothing to do with Save.
             VStack(alignment: .leading, spacing: 2) {
                 Toggle("Open at login", isOn: Binding(
@@ -43,11 +41,10 @@ struct SettingsView: View {
                     .foregroundStyle(.red)
                     .lineLimit(1)
                     .help(model.loginNote ?? "")
-                    .frame(height: 16, alignment: .topLeading)
+                    .frame(height: 14, alignment: .topLeading)
                     .accessibilityHidden(model.loginNote == nil) // don't read out the blank placeholder
             }
-
-            Divider().padding(.vertical, 4)
+            .padding(.top, 12)
 
             updateFooter
         }
