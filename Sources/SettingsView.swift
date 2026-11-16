@@ -31,20 +31,24 @@ struct SettingsView: View {
             .padding(.top, 4)
 
             // Unlike the fields above, this applies at once and has nothing to do with Save.
-            VStack(alignment: .leading, spacing: 2) {
+            // A problem shows beside the switch, in the height the row has anyway.
+            HStack {
                 Toggle("Open at login", isOn: Binding(
                     get: { model.launchAtLogin },
                     set: { model.setLaunchAtLogin($0) }
                 ))
-                Text(model.loginNote ?? " ")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .lineLimit(1)
-                    .help(model.loginNote ?? "")
-                    .frame(height: 14, alignment: .topLeading)
-                    .accessibilityHidden(model.loginNote == nil) // don't read out the blank placeholder
+                Spacer(minLength: 12)
+                if let note = model.loginNote {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.trailing)
+                        .lineLimit(2)
+                        .help(note)
+                }
             }
-            .padding(.top, 12)
+            .frame(height: 30)
+            .padding(.top, 6)
 
             updateFooter
         }
@@ -125,18 +129,18 @@ struct SettingsView: View {
     /// The running version, and a manual check for a newer release. Nothing is installed:
     /// the link opens the release page, where the dmg is.
     private var updateFooter: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(model.version.description)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
-                Spacer()
-                Button("Check for Updates…") { Task { await model.checkForUpdates() } }
-                    .disabled(model.isCheckingForUpdates)
+                updateStatusView
+                    .frame(height: 16, alignment: .leading)
             }
-            updateStatusView
-                .frame(height: 16, alignment: .leading)
+            Spacer(minLength: 12)
+            Button("Check for Updates…") { Task { await model.checkForUpdates() } }
+                .disabled(model.isCheckingForUpdates)
         }
     }
 
@@ -159,7 +163,7 @@ struct SettingsView: View {
         case .available(let release):
             HStack(spacing: 6) {
                 Image(systemName: "arrow.down.circle.fill").foregroundStyle(Color.accentColor).accessibilityHidden(true)
-                Text("Version \(release.version) is available.")
+                Text("New: \(release.version)").lineLimit(1).fixedSize()
                 Link("View release", destination: release.url)
             }
             .font(.caption)
